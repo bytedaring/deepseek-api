@@ -48,6 +48,9 @@ func WithDeepSeekClientApi(api_key string) DeepSeekClientOptions {
 
 func WithDeepSeekClientHttpClient(http_client *http.Client) DeepSeekClientOptions {
 	return func(dsc *DeepSeekClient) {
+		if http_client == nil {
+			http_client = &http.Client{Timeout: DEFAULT_TIMEOUT}
+		}
 		dsc.http_client = http_client
 	}
 }
@@ -70,12 +73,6 @@ func NewDeepSeekClient(options ...DeepSeekClientOptions) *DeepSeekClient {
 		dsc.host = DEFAULT_HOST
 	}
 
-	if dsc.http_client == nil {
-		dsc.http_client = &http.Client{
-			Timeout: DEFAULT_TIMEOUT,
-		}
-	}
-
 	return dsc
 }
 
@@ -84,12 +81,13 @@ func DefaultDeepSeekClient(api_key string) *DeepSeekClient {
 
 	client_api_key := WithDeepSeekClientApi(api_key)
 
-	http_client := &http.Client{
-		Timeout: DEFAULT_TIMEOUT,
-	}
-	client_http_client := WithDeepSeekClientHttpClient(http_client)
+	client_http_client := WithDeepSeekClientHttpClient(nil)
 
 	return NewDeepSeekClient(client_communication, client_api_key, client_http_client)
+}
+
+func (dsc *DeepSeekClient) GetProtocol() string {
+	return dsc.protocol
 }
 
 func (dsc *DeepSeekClient) SetProtocol(protocol string) *DeepSeekClient {
@@ -97,14 +95,26 @@ func (dsc *DeepSeekClient) SetProtocol(protocol string) *DeepSeekClient {
 	return dsc
 }
 
+func (dsc *DeepSeekClient) GetHost() string {
+	return dsc.host
+}
+
 func (dsc *DeepSeekClient) SetHost(host string) *DeepSeekClient {
 	dsc.host = host
 	return dsc
 }
 
+func (dsc *DeepSeekClient) GetApi() string {
+	return dsc.api_key
+}
+
 func (dsc *DeepSeekClient) SetApi(api_key string) *DeepSeekClient {
 	dsc.api_key = api_key
 	return dsc
+}
+
+func (dsc *DeepSeekClient) GetHttpClient() *http.Client {
+	return dsc.http_client
 }
 
 func (dsc *DeepSeekClient) SetHttpClient(http_client *http.Client) *DeepSeekClient {
@@ -125,14 +135,26 @@ func (dsc *DeepSeekClient) getHeader() http.Header {
 }
 
 func (dsc *DeepSeekClient) Do(method string, path string, ds_req DeepSeekRequest) (ds_resp DeepSeekResponse, err error) {
-	ds_req_json, err := json.Marshal(ds_req)
-	if err != nil {
-		return nil, err
-	}
+	var req *http.Request
+	if ds_req == nil {
+		req, err = http.NewRequest(method, dsc.getUrl(path), nil)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		if ds_req.GetStream() {
+			return nil, fmt.Errorf("streaming is not supported")
+		}
 
-	req, err := http.NewRequest(method, dsc.getUrl(path), bytes.NewBuffer(ds_req_json))
-	if err != nil {
-		return nil, err
+		ds_req_json, err := json.Marshal(ds_req)
+		if err != nil {
+			return nil, err
+		}
+
+		req, err = http.NewRequest(method, dsc.getUrl(path), bytes.NewBuffer(ds_req_json))
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	req.Header = dsc.getHeader()
@@ -152,6 +174,32 @@ func (dsc *DeepSeekClient) Do(method string, path string, ds_req DeepSeekRequest
 		return nil, err
 	}
 
+	dsu_resp := make(DeepSeekUniversalResponse)
+
+	err = json.Unmarshal(resp_body, &dsu_resp)
+	if err != nil {
+		return nil, err
+	}
+
+	if dsu_resp.DeepSeekResponse() != nil {
+		ds_resp = &DeepSeekErrorResponse{}
+	} else if _, ok := dsu_resp["is_available"]; ok {
+		ds_resp = &DeepSeekBalanceResponse{}
+	} else if _, ok := dsu_resp["object"]; ok {
+		switch dsu_resp["object"] {
+		case OBJECT_CHAT_COMPLETION:
+			ds_resp = &DeepSeekChatResponse{}
+		case OBJECT_TEXT_COMPLETION:
+			ds_resp = &DeepSeekCompletionsResponse{}
+		case OBJECT_LIST:
+			ds_resp = &DeepSeekModelsResponse{}
+		default:
+			return nil, fmt.Errorf("unknown object type: %s", dsu_resp["object"])
+		}
+	} else {
+		return nil, fmt.Errorf("unknown response type")
+	}
+
 	err = json.Unmarshal(resp_body, ds_resp)
 	if err != nil {
 		return nil, err
@@ -160,7 +208,44 @@ func (dsc *DeepSeekClient) Do(method string, path string, ds_req DeepSeekRequest
 	return ds_resp, nil
 }
 
-func (dsc *DeepSeekClient) Chat(dsc_req *DeepSeekChatRequest) (dsc_resp *DeepSeekCompletionResponse, err error) {
+type StreamDoEvent func(response *http.Response, args ...any) error
+
+func (dsc *DeepSeekClient) StreamDo(method string, path string, ds_req DeepSeekRequest, event StreamDoEvent, args ...any) error {
+	if !ds_req.GetStream() {
+		return fmt.Errorf("stream must be set to true")
+	}
+
+	ds_req_json, err := json.Marshal(ds_req)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest(method, dsc.getUrl(path), bytes.NewBuffer(ds_req_json))
+	if err != nil {
+		return err
+	}
+
+	req.Header = dsc.getHeader()
+
+	resp, err := dsc.http_client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("HTTP request failed with status code %d", resp.StatusCode)
+	}
+
+	err = event(resp, args...)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (dsc *DeepSeekClient) Chat(dsc_req *DeepSeekChatRequest) (dsc_resp *DeepSeekChatResponse, err error) {
 	ds_resp, err := dsc.Do(http.MethodPost, DEFAULT_CHAT_PATH, dsc_req)
 	if err != nil {
 		return nil, err
@@ -171,10 +256,10 @@ func (dsc *DeepSeekClient) Chat(dsc_req *DeepSeekChatRequest) (dsc_resp *DeepSee
 		return nil, ds_resp.DeepSeekResponse()
 	}
 
-	return ds_resp.(*DeepSeekCompletionResponse), nil
+	return ds_resp.(*DeepSeekChatResponse), nil
 }
 
-func (dsc *DeepSeekClient) Completions(dsc_req *DeepSeekCompletionsRequest) (dsc_resp *DeepSeekCompletionResponse, err error) {
+func (dsc *DeepSeekClient) Completions(dsc_req *DeepSeekCompletionsRequest) (dsc_resp *DeepSeekCompletionsResponse, err error) {
 	ds_resp, err := dsc.Do(http.MethodPost, DEFAULT_COMPLETIONS_PATH, dsc_req)
 	if err != nil {
 		return nil, err
@@ -185,7 +270,7 @@ func (dsc *DeepSeekClient) Completions(dsc_req *DeepSeekCompletionsRequest) (dsc
 		return nil, ds_resp.DeepSeekResponse()
 	}
 
-	return ds_resp.(*DeepSeekCompletionResponse), nil
+	return ds_resp.(*DeepSeekCompletionsResponse), nil
 }
 
 func (dsc *DeepSeekClient) Models() (dsm_resp *DeepSeekModelsResponse, err error) {

@@ -1,9 +1,20 @@
 package deepseek_api
 
-import "errors"
+import (
+	"fmt"
+)
 
 type DeepSeekResponse interface {
 	DeepSeekResponse() error
+}
+
+type DeepSeekUniversalResponse map[string]any
+
+func (dsr DeepSeekUniversalResponse) DeepSeekResponse() error {
+	if dsr["error"] != nil {
+		return fmt.Errorf("deepseek error: %s", dsr["error"].(map[string]any)["message"].(string))
+	}
+	return nil
 }
 
 type DeepSeekErrorResponse struct {
@@ -16,7 +27,7 @@ type DeepSeekErrorResponse struct {
 }
 
 func (dsr *DeepSeekErrorResponse) DeepSeekResponse() error {
-	return errors.New(dsr.Error.Message)
+	return fmt.Errorf("deepseek error: %s", dsr.Error.Message)
 }
 
 type Content struct {
@@ -30,7 +41,7 @@ type Content struct {
 	} `json:"top_logprobs"`
 }
 
-type Choice struct {
+type ChatChoice struct {
 	FinishReason string          `json:"finish_reason"`
 	Index        int64           `json:"index"`
 	Message      ResponseMessage `json:"message"`
@@ -50,17 +61,49 @@ type Usage struct {
 	} `json:"completion_tokens_details"`
 }
 
-type DeepSeekCompletionResponse struct {
-	Id                string   `json:"id"`
-	Choices           []Choice `json:"choices"`
-	Created           int64    `json:"created"`
-	Model             string   `json:"model"`
-	SystemFingerprint *string  `json:"system_fingerprint"`
-	Object            string   `json:"object"`
-	Usage             Usage    `json:"usage"`
+const (
+	OBJECT_CHAT_COMPLETION = "chat.completion"
+	OBJECT_TEXT_COMPLETION = "text_completion"
+	OBJECT_LIST            = "list"
+)
+
+type DeepSeekChatResponse struct {
+	Id                string       `json:"id"`
+	Choices           []ChatChoice `json:"choices"`
+	Created           int64        `json:"created"`
+	Model             string       `json:"model"`
+	SystemFingerprint *string      `json:"system_fingerprint"`
+	Object            string       `json:"object"`
+	Usage             Usage        `json:"usage"`
 }
 
-func (dsr *DeepSeekCompletionResponse) DeepSeekResponse() error {
+func (dsr *DeepSeekChatResponse) DeepSeekResponse() error {
+	return nil
+}
+
+type CompletionsChoice struct {
+	FinishReason string `json:"finish_reason"`
+	Index        int64  `json:"index"`
+	Logprobs     *struct {
+		TextOffset    []int64        `json:"text_offset"`
+		TokenLogprobs []float64      `json:"token_logprobs"`
+		Tokens        []string       `json:"tokens"`
+		TopLogprobs   map[string]any `json:"top_logprobs"`
+	} `json:"logprobs"`
+	Text string `json:"text"`
+}
+
+type DeepSeekCompletionsResponse struct {
+	Id                string              `json:"id"`
+	Choices           []CompletionsChoice `json:"choices"`
+	Created           int64               `json:"created"`
+	Model             string              `json:"model"`
+	SystemFingerprint *string             `json:"system_fingerprint"`
+	Object            string              `json:"object"`
+	Usage             Usage               `json:"usage"`
+}
+
+func (dsr *DeepSeekCompletionsResponse) DeepSeekResponse() error {
 	return nil
 }
 

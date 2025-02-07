@@ -9,6 +9,7 @@ const (
 
 type DeepSeekRequest interface {
 	DeepSeekRequest() error
+	GetStream() bool
 }
 
 type ResponseFormat struct {
@@ -148,6 +149,10 @@ func (dsr *DeepSeekChatRequest) DeepSeekRequest() error {
 	return err
 }
 
+func (dsr *DeepSeekChatRequest) GetStream() bool {
+	return dsr.Stream
+}
+
 type DeepSeekCompletionsRequest struct {
 	Model            string        `json:"model"`
 	Prompt           string        `json:"prompt"`
@@ -232,4 +237,8 @@ func (dsr *DeepSeekCompletionsRequest) DeepSeekRequest() error {
 	}
 
 	return err
+}
+
+func (dsr *DeepSeekCompletionsRequest) GetStream() bool {
+	return dsr.Stream
 }

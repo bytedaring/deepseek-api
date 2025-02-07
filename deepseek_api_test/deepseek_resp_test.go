@@ -32,9 +32,9 @@ func TestDeepSeekErrorResponse_DeepSeekResponse_ReturnsError(t *testing.T) {
 }
 
 func TestDeepSeekCompletionResponse_DeepSeekResponse_ReturnsNil(t *testing.T) {
-	completionResponse := &deepseek_api.DeepSeekCompletionResponse{
+	completionResponse := &deepseek_api.DeepSeekChatResponse{
 		Id:      "test-id",
-		Choices: []deepseek_api.Choice{},
+		Choices: []deepseek_api.ChatChoice{},
 		Created: 1234567890,
 		Model:   "test-model",
 	}

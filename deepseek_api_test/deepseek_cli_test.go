@@ -9,7 +9,7 @@ import (
 )
 
 func TestDeepSeekClient_Validation(t *testing.T) {
-	api_key := "sk-15d517eb49064e388fb67059a299cd0a"
+	api_key := "YEAR_API_KEY"
 
 	deepseek_client := deepseek_api.DefaultDeepSeekClient(api_key)
 

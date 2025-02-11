@@ -6,6 +6,8 @@ type DeepSeekMessage interface {
 	DeepSeekMessage() error
 	GetContent() string
 	GetRole() string
+	SetRole(role string)
+	SetContent(content string)
 }
 
 const (
@@ -43,6 +45,14 @@ func (m *BasicMessage) GetContent() string {
 
 func (m *BasicMessage) GetRole() string {
 	return m.Role
+}
+
+func (m *BasicMessage) SetRole(role string) {
+	m.Role = role
+}
+
+func (m *BasicMessage) SetContent(content string) {
+	m.Content = content
 }
 
 type SystemMessage struct {

@@ -9,7 +9,7 @@ const (
 
 type DeepSeekRequest interface {
 	DeepSeekRequest() error
-	GetStream() bool
+	StreamModel() bool
 }
 
 type ResponseFormat struct {
@@ -149,7 +149,7 @@ func (dsr *DeepSeekChatRequest) DeepSeekRequest() error {
 	return err
 }
 
-func (dsr *DeepSeekChatRequest) GetStream() bool {
+func (dsr *DeepSeekChatRequest) StreamModel() bool {
 	return dsr.Stream
 }
 
@@ -239,6 +239,6 @@ func (dsr *DeepSeekCompletionsRequest) DeepSeekRequest() error {
 	return err
 }
 
-func (dsr *DeepSeekCompletionsRequest) GetStream() bool {
+func (dsr *DeepSeekCompletionsRequest) StreamModel() bool {
 	return dsr.Stream
 }

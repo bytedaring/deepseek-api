@@ -142,7 +142,7 @@ func (dsc *DeepSeekClient) Do(method string, path string, ds_req DeepSeekRequest
 			return nil, err
 		}
 	} else {
-		if ds_req.GetStream() {
+		if ds_req.StreamModel() {
 			return nil, fmt.Errorf("streaming is not supported")
 		}
 
@@ -211,7 +211,7 @@ func (dsc *DeepSeekClient) Do(method string, path string, ds_req DeepSeekRequest
 type StreamDoEvent func(response *http.Response, args ...any) error
 
 func (dsc *DeepSeekClient) StreamDo(method string, path string, ds_req DeepSeekRequest, event StreamDoEvent, args ...any) error {
-	if !ds_req.GetStream() {
+	if !ds_req.StreamModel() {
 		return fmt.Errorf("stream must be set to true")
 	}
 
